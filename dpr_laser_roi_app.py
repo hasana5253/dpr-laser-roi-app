@@ -164,9 +164,10 @@ for proj_name, defaults in list(st.session_state.projects.items()):
             else:
                 del st.session_state.projects[proj_name]
                 st.session_state.projects[new_name] = updated_data
-                st.experimental_rerun()
+                st.rerun()  # <-- FIX: use st.rerun(), not st.experimental_rerun()
         else:
             st.session_state.projects[proj_name] = updated_data
+
 
 # -------------------------- CALCULATIONS --------------------------
 total_days = sum(p['days'] for p in st.session_state.projects.values())
