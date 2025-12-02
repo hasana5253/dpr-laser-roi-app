@@ -9,252 +9,261 @@ col_logo, col_title = st.columns([1, 4])
 with col_logo:
     st.image("dpr_laserscan_logo.png", use_column_width=True)
 with col_title:
-    st.title("DPR Laser Scanning ROI Model")
-    st.markdown("**Handheld vs Gantry** • Interactive ROI model with Monte Carlo & sensitivity analysis")
+    st.title("DPR Laser Scan Car Wash ROI Model")
+    st.markdown("**Handheld vs Gantry** • Fully customizable financial model")
 
-# -------------------------- SIDEBAR INPUTS --------------------------
-with st.sidebar:
-    st.header("Assumptions")
-    rate = st.slider("Foreman loaded rate ($/hr)", 40, 120, 62, 5)
-    workdays_per_year = st.slider("Workdays per year", 200, 300, 260, 10)
+# -------------------------- PROJECT MANAGER (Add/Remove Projects) --------------------------
+if 'projects' not in st.session_state:
+    st.session_state.projects = {
+        'Project 1': {'days': 650, 'frames': 2880, 'modules': 1440, 'parts_per_day': 24.0, 'module_value': 100000},
+        'Project 2': {'days': 168, 'frames': 1400, 'modules': 700, 'parts_per_day': 20.0, 'module_value': 474000},
+        'Project 3': {'days': 42,  'frames': 90,   'modules': 45,  'parts_per_day': 26.4, 'module_value': 650000},
+    }
 
-    st.markdown("---")
-    st.subheader("CAPEX")
-    handheld_capex = st.number_input("Handheld system CAPEX ($)", 100000, 600000, 260000, 10000)
-    gantry_capex_base = st.number_input("Single Gantry CAPEX ($)", 1000000, 3500000, 1479552, 50000)
-    reprogram_per_project = st.number_input("Reprogramming cost per extra project ($)", 0, 100000, 40000, 5000)
-    num_gantries = st.selectbox("Number of gantries deployed", [1, 2, 3, 4], 1)
-    projects_used = st.selectbox("Projects using gantry(s)", [1, 2, 3], 2)
+st.sidebar.header("Project Manager")
+new_proj = st.sidebar.text_input("Add new project (e.g., Project 4)")
+if st.sidebar.button("Add Project") and new_proj:
+    if new_proj not in st.session_state.projects:
+        st.session_state.projects[new_proj] = {'days': 100, 'frames': 500, 'modules': 200, 'parts_per_day': 20.0, 'module_value': 200000}
+        st.rerun()
 
-    st.markdown("---")
-    st.subheader("Project Portfolio")
-    days = {'P1': st.number_input("P1 duration (days)", 400, 1000, 650),
-            'P2': st.number_input("P2 duration (days)", 100, 300, 168),
-            'P3': st.number_input("P3 duration (days)", 20, 100, 42)}
-    frames = {'P1': st.number_input("P1 frames", 1000, 5000, 2880),
-              'P2': st.number_input("P2 frames", 500, 3000, 1400),
-              'P3': st.number_input("P3 frames", 10, 500, 90)}
-    modules = {'P1': st.number_input("P1 modules", 500, 3000, 1440),
-               'P2': st.number_input("P2 modules", 300, 2000, 700),
-               'P3': st.number_input("P3 modules", 10, 300, 45)}
-    parts_per_day = {'P1': st.number_input("P1 parts/day", 10.0, 40.0, 24.0, 1.0),
-                     'P2': st.number_input("P2 parts/day", 10.0, 40.0, 20.0, 1.0),
-                     'P3': st.number_input("P3 parts/day", 10.0, 40.0, 26.4, 0.5)}
-    module_value = {'P1': st.number_input("P1 module value ($)", 50000, 300000, 100000, 10000),
-                    'P2': st.number_input("P2 module value ($)", 300000, 1000000, 474000, 20000),
-                    'P3': st.number_input("P3 module value ($)", 400000, 1500000, 650000, 50000)}
+if len(st.session_state.projects) > 1:
+    to_remove = st.sidebar.selectbox("Remove project", options=["—"] + list(st.session_state.projects.keys()))
+    if st.sidebar.button("Remove Selected") and to_remove != "—":
+        del st.session_state.projects[to_remove]
+        st.rerun()
 
-    st.markdown("---")
-    st.subheader("Uncertainty Ranges")
-    c1, c2, c3 = st.columns(3)
-    with c1: scan_min_a = st.number_input("Scan time min (min)", 3.0, 10.0, 5.0, 0.5)
-    with c2: scan_min_m = st.number_input("Scan time mode (min)", 5.0, 15.0, 7.5, 0.5)
-    with c3: scan_min_b = st.number_input("Scan time max (min)", 8.0, 25.0, 10.0, 0.5)
-    p_wrong_a = st.slider("p_wrong Beta α", 0.5, 10.0, 2.0, 0.5)
-    p_wrong_b = st.slider("p_wrong Beta β", 100.0, 500.0, 198.0, 10.0)
-    sev_a = st.number_input("Severity min (%)", 0.0, 0.10, 0.01, 0.005, format="%.3f")
-    sev_m = st.number_input("Severity mode (%)", 0.005, 0.10, 0.02, 0.005, format="%.3f")
-    sev_b = st.number_input("Severity max (%)", 0.01, 0.20, 0.05, 0.01, format="%.3f")
+# -------------------------- INPUTS --------------------------
+st.sidebar.header("Labor & Process Assumptions")
+col1, col2 = st.sidebar.columns(2)
+with col1:
+    manual_frame_hr = st.number_input("Manual frame time (hrs)", 5.0, 20.0, 10.0, 0.5)
+    manual_final_hr = st.number_input("Manual final scan (hrs)", 8.0, 20.0, 12.0, 0.5)
+    manual_rework_hr = st.number_input("Manual rework time (hrs)", 5.0, 20.0, 10.0, 0.5)
+with col2:
+    gantry_frame_hr = st.number_input("Gantry frame time (hrs)", 0.1, 2.0, 0.25, 0.05)
+    gantry_final_hr = st.number_input("Gantry final scan (hrs)", 0.1, 2.0, 0.25, 0.05)
+    gantry_rework_hr = st.number_input("Gantry rework time (hrs)", 0.5, 5.0, 1.0, 0.1)
 
-    run_mc = st.button("Run Monte Carlo (10,000 sims)", type="primary")
+st.sidebar.markdown("---")
+st.sidebar.subheader("Financial Inputs")
+rate = st.sidebar.slider("Foreman loaded rate ($/hr)", 40, 150, 62, 5)
+workdays_per_year = st.sidebar.slider("Workdays per year", 200, 300, 260, 10)
 
-# -------------------------- CORE CALCULATION FUNCTION --------------------------
-def calculate_roi(
-    rate, workdays_per_year, handheld_capex, gantry_capex_base, reprogram_per_project,
-    num_gantries, projects_used, days, frames, modules, parts_per_day, module_value,
-    scan_min_mean, p_wrong_mean, severity_mean
-):
-    total_days = sum(days.values())
-    p_late_manual = 4 / (4 + 196)   # beta mean
-    p_late_gantry = 1 / (1 + 99)
+handheld_capex = st.sidebar.number_input("Handheld system CAPEX ($)", 100000, 1000000, 260000, 10000)
+gantry_capex_base = st.sidebar.number_input("Gantry CAPEX per unit ($)", 1000000, 5000000, 1479552, 50000)
+reprogram_per_project = st.sidebar.number_input("Reprogramming cost per extra project ($)", 0, 200000, 40000, 5000)
+num_gantries = st.sidebar.selectbox("Number of gantries deployed", [1, 2, 3, 4], 1)
+projects_used = st.sidebar.selectbox("Projects using gantry(s)", [1, 2, 3, 4, 5], 2)
 
+st.sidebar.markdown("---")
+st.sidebar.subheader("Uncertainty Ranges")
+c1, c2, c3 = st.sidebar.columns(3)
+with c1: scan_min = st.number_input("Scan time min (min)", 2.0, 12.0, 5.0, 0.5)
+with c2: scan_mode = st.number_input("Scan time mode (min)", 4.0, 20.0, 7.5, 0.5)
+with c3: scan_max = st.number_input("Scan time max (min)", 6.0, 30.0, 10.0, 0.5)
+
+p_wrong_alpha = st.sidebar.slider("Error rate α (Beta)", 0.5, 15.0, 2.0, 0.5)
+p_wrong_beta = st.sidebar.slider("Error rate β (Beta)", 50.0, 600.0, 198.0, 10.0)
+sev_min = st.sidebar.number_input("Severity min (%)", 0.0, 0.2, 0.01, 0.005, format="%.3f")
+sev_mode = st.sidebar.number_input("Severity mode (%)", 0.005, 0.2, 0.02, 0.005, format="%.3f")
+sev_max = st.sidebar.number_input("Severity max (%)", 0.01, 0.3, 0.05, 0.01, format="%.3f")
+
+# Project Inputs
+st.sidebar.markdown("---")
+st.sidebar.subheader("Project Details")
+for proj_name, defaults in st.session_state.projects.items():
+    with st.sidebar.expander(f"Edit {proj_name}", expanded=False):
+        col1, col2 = st.columns(2)
+        with col1:
+            st.session_state.projects[proj_name]['days'] = st.number_input(f"{proj_name} days", 1, 2000, defaults['days'], key=f"days_{proj_name}")
+            st.session_state.projects[proj_name]['frames'] = st.number_input(f"{proj_name} frames", 1, 10000, defaults['frames'], key=f"frames_{proj_name}")
+            st.session_state.projects[proj_name]['modules'] = st.number_input(f"{proj_name} modules", 1, 5000, defaults['modules'], key=f"modules_{proj_name}")
+        with col2:
+            st.session_state.projects[proj_name]['parts_per_day'] = st.number_input(f"{proj_name} parts/day", 1.0, 100.0, defaults['parts_per_day'], 0.5, key=f"ppd_{proj_name}")
+            st.session_state.projects[proj_name]['module_value'] = st.number_input(f"{proj_name} value ($)", 10000, 5000000, defaults['module_value'], 10000, key=f"value_{proj_name}")
+
+# -------------------------- CALCULATIONS --------------------------
+total_days = sum(p['days'] for p in st.session_state.projects.values())
+
+def tri_mean(a, m, b): return (a + m + b) / 3
+def beta_mean(a, b): return a / (a + b)
+
+scan_mean = tri_mean(scan_min, scan_mode, scan_max)
+p_wrong_mean = beta_mean(p_wrong_alpha, p_wrong_beta)
+severity_mean = tri_mean(sev_min, sev_mode, sev_max)
+p_late_manual = beta_mean(4, 196)
+p_late_gantry = beta_mean(1, 99)
+
+def calculate_roi():
     # Handheld
-    hh_total = 0
-    for p in ['P1', 'P2', 'P3']:
-        labor_save = 8 * rate - parts_per_day[p] * (scan_min_mean / 60) * rate
-        opp_save = parts_per_day[p] * p_wrong_mean * 6 * rate
-        hh_total += (labor_save + opp_save) * days[p]
-    hh_roi = (hh_total - handheld_capex) / handheld_capex
-    hh_payback = handheld_capex / (hh_total / total_days * workdays_per_year)
+    hh_savings = 0
+    for p in st.session_state.projects.values():
+        labor_save = (manual_frame_hr + manual_final_hr + manual_rework_hr) * rate - p['parts_per_day'] * (scan_mean / 60) * rate
+        rework_save = p['parts_per_day'] * p_wrong_mean * 6 * rate
+        hh_savings += (labor_save + rework_save) * p['days']
+
+    hh_roi = (hh_savings - handheld_capex) / handheld_capex
+    hh_payback = handheld_capex / (hh_savings / total_days * workdays_per_year) if hh_savings > 0 else 999
 
     # Gantry
-    gn_total = 0
-    for p in ['P1', 'P2', 'P3']:
-        labor = frames[p] * (10 - 0.25) * rate + modules[p] * ((12 - 0.25) + (10 - 1.0)) * rate
-        ev = modules[p] * (p_late_manual - p_late_gantry) * severity_mean * module_value[p]
-        gn_total += labor + ev
+    gn_savings = 0
+    for p in st.session_state.projects.values():
+        labor_save = p['frames'] * (manual_frame_hr - gantry_frame_hr) * rate + \
+                     p['modules'] * ((manual_final_hr - gantry_final_hr) + (manual_rework_hr - gantry_rework_hr)) * rate
+        ev_save = p['modules'] * (p_late_manual - p_late_gantry) * severity_mean * p['module_value']
+        gn_savings += labor_save + ev_save
+
     investment = num_gantries * gantry_capex_base + reprogram_per_project * num_gantries * max(projects_used - 1, 0)
-    gn_roi = (gn_total - investment) / investment if investment > 0 else 0
-    gn_payback = investment / (gn_total / total_days * workdays_per_year) if gn_total > 0 else 999
+    gn_roi = (gn_savings - investment) / investment if investment > 0 else 0
+    gn_payback = investment / (gn_savings / total_days * workdays_per_year) if gn_savings > 0 else 999
 
-    return hh_total, hh_roi, hh_payback, gn_total, investment, gn_roi, gn_payback
+    return hh_savings, hh_roi, hh_payback, gn_savings, investment, gn_roi, gn_payback
 
-# Base means
-scan_min_mean = (scan_min_a + scan_min_m + scan_min_b) / 3
-p_wrong_mean = p_wrong_a / (p_wrong_a + p_wrong_b)
-severity_mean = (sev_a + sev_m + sev_b) / 3
+hh_sav, hh_roi, hh_pb, gn_sav, inv, gn_roi, gn_pb = calculate_roi()
 
-# Base case
-hh_total, hh_roi, hh_payback, gn_total, investment, gn_roi, gn_payback = calculate_roi(
-    rate, workdays_per_year, handheld_capex, gantry_capex_base, reprogram_per_project,
-    num_gantries, projects_used, days, frames, modules, parts_per_day, module_value,
-    scan_min_mean, p_wrong_mean, severity_mean
-)
-
-# -------------------------- DETERMINISTIC RESULTS --------------------------
-st.header("Deterministic Results")
+# -------------------------- RESULTS --------------------------
+st.header("Financial Summary")
 c1, c2 = st.columns(2)
 with c1:
-    st.metric("Handheld Total Savings", f"${hh_total:,.0f}")
+    st.metric("Handheld Total Savings", f"${hh_sav:,.0f}")
     st.metric("Handheld ROI", f"{hh_roi:.2f}x")
-    st.metric("Handheld Payback", f"{hh_payback:.2f} years")
+    st.metric("Handheld Payback", f"{hh_pb:.2f} years")
 with c2:
-    st.metric("Gantry Total Savings", f"${gn_total:,.0f}")
-    st.metric("Gantry Investment", f"${investment:,.0f}")
+    st.metric("Gantry Total Savings", f"${gn_sav:,.0f}")
+    st.metric("Gantry Investment", f"${inv:,.0f}")
     st.metric("Gantry ROI", f"{gn_roi:.2f}x")
-    st.metric("Gantry Payback", f"{gn_payback:.2f} years")
-
-# -------------------------- SENSITIVITY ANALYSIS --------------------------
-st.header("Sensitivity Analysis - Key Drivers")
-
-sensitivity_params = [
-    ("Foreman Rate (±20%)", "rate", 0.8, 1.2),
-    ("Workdays/Year (±10%)", "workdays_per_year", 0.9, 1.1),
-    ("Handheld CAPEX (±10%)", "handheld_capex", 0.9, 1.1),
-    ("Gantry CAPEX (±10%)", "gantry_capex_base", 0.9, 1.1),
-    ("Reprogram Cost (±20%)", "reprogram_per_project", 0.8, 1.2),
-    ("Scan Time Mean (±20%)", "scan_min_mean", 0.8, 1.2),
-    ("Error Rate (±20%)", "p_wrong_mean", 0.8, 1.2),
-    ("Severity (±20%)", "severity_mean", 0.8, 1.2),
-]
-
-hh_sens = {}
-gn_sens = {}
-
-for label, param, low, high in sensitivity_params:
-    # Low scenario
-    temp_val = eval(param) * low
-    kwargs = {param: temp_val}
-    _, h_roi_low, _, _, _, g_roi_low, _ = calculate_roi(
-        rate if param != "rate" else temp_val,
-        workdays_per_year if param != "workdays_per_year" else temp_val,
-        handheld_capex if param != "handheld_capex" else temp_val,
-        gantry_capex_base if param != "gantry_capex_base" else temp_val,
-        reprogram_per_project if param != "reprogram_per_project" else temp_val,
-        num_gantries, projects_used, days, frames, modules, parts_per_day, module_value,
-        scan_min_mean if param != "scan_min_mean" else temp_val,
-        p_wrong_mean if param != "p_wrong_mean" else temp_val,
-        severity_mean if param != "severity_mean" else temp_val,
-    )
-    # High scenario
-    temp_val = eval(param) * high
-    kwargs = {param: temp_val}
-    _, h_roi_high, _, _, _, g_roi_high, _ = calculate_roi(
-        rate if param != "rate" else temp_val,
-        workdays_per_year if param != "workdays_per_year" else temp_val,
-        handheld_capex if param != "handheld_capex" else temp_val,
-        gantry_capex_base if param != "gantry_capex_base" else temp_val,
-        reprogram_per_project if param != "reprogram_per_project" else temp_val,
-        num_gantries, projects_used, days, frames, modules, parts_per_day, module_value,
-        scan_min_mean if param != "scan_min_mean" else temp_val,
-        p_wrong_mean if param != "p_wrong_mean" else temp_val,
-        severity_mean if param != "severity_mean" else temp_val,
-    )
-    hh_sens[label] = (h_roi_low - hh_roi, h_roi_high - hh_roi)
-    gn_sens[label] = (g_roi_low - gn_roi, g_roi_high - gn_roi)
-
-def plot_tornado(data, base_roi, title):
-    labels = sorted(data, key=lambda k: max(abs(data[k][0]), abs(data[k][1])), reverse=True)
-    low = [data[l][0] for l in labels]
-    high = [data[l][1] for l in labels]
-    fig, ax = plt.subplots(figsize=(9, 5))
-    y = np.arange(len(labels))
-    ax.barh(y, low, left=base_roi, color='#e74c3c', label='Low Scenario')
-    ax.barh(y, high, left=base_roi, color='#27ae60', label='High Scenario')
-    ax.set_yticks(y)
-    ax.set_yticklabels(labels)
-    ax.set_xlabel("Change in ROI (x)")
-    ax.set_title(title)
-    ax.legend()
-    ax.grid(True, axis='x', alpha=0.3)
-    return fig
-
-c1, c2 = st.columns(2)
-with c1:
-    st.pyplot(plot_tornado(hh_sens, hh_roi, "Handheld ROI Sensitivity"))
-with c2:
-    st.pyplot(plot_tornado(gn_sens, gn_roi, "Gantry ROI Sensitivity"))
+    st.metric("Gantry Payback", f"{gn_pb:.2f} years")
 
 # -------------------------- MONTE CARLO --------------------------
+run_mc = st.button("Run Monte Carlo Simulation (10,000 runs)", type="primary")
+
 if run_mc:
-    with st.spinner("Running 10,000 Monte Carlo simulations..."):
+    with st.spinner("Running 10,000 simulations..."):
         N = 10000
         np.random.seed(42)
 
-        scan_times = np.random.triangular(scan_min_a, scan_min_m, scan_min_b, N)
-        p_wrongs = np.random.beta(p_wrong_a, p_wrong_b, N)
-        severities = np.random.triangular(sev_a, sev_m, sev_b, N)
+        scan_times = np.random.triangular(scan_min, scan_mode, scan_max, N)
+        p_wrongs = np.random.beta(p_wrong_alpha, p_wrong_beta, N)
+        severities = np.random.triangular(sev_min, sev_mode, sev_max, N)
 
-        # Handheld
-        hh_savings = np.sum([
-            (8 * rate - parts_per_day[p] * (scan_times / 60) * rate + parts_per_day[p] * p_wrongs * 6 * rate) * days[p]
-            for p in ['P1', 'P2', 'P3']
-        ], axis=1)
+        hh_roi_list = []
+        hh_payback_list = []
+        gn_roi_list = []
+        gn_payback_list = []
 
-        hh_roi_mc = (hh_savings - handheld_capex) / handheld_capex
-        hh_payback_mc = handheld_capex / (hh_savings / sum(days.values()) * workdays_per_year)
+        for i in range(N):
+            # Temporarily override means
+            temp_scan = scan_times[i]
+            temp_p_wrong = p_wrongs[i]
+            temp_sev = severities[i]
 
-        # Gantry
-        gn_investment = num_gantries * gantry_capex_base + reprogram_per_project * num_gantries * max(projects_used - 1, 0)
-        gn_savings = np.sum([
-            frames[p] * 9.75 * rate +
-            modules[p] * (11.75 + 9.0) * rate +
-            modules[p] * (0.02 - 0.01) * severities * module_value[p]
-            for p in ['P1', 'P2', 'P3']
-        ], axis=1)
+            # Handheld
+            hh_sav_i = 0
+            for p in st.session_state.projects.values():
+                labor_save = (manual_frame_hr + manual_final_hr + manual_rework_hr) * rate - p['parts_per_day'] * (temp_scan / 60) * rate
+                rework_save = p['parts_per_day'] * temp_p_wrong * 6 * rate
+                hh_sav_i += (labor_save + rework_save) * p['days']
+            hh_roi_i = (hh_sav_i - handheld_capex) / handheld_capex
+            hh_payback_i = handheld_capex / (hh_sav_i / total_days * workdays_per_year) if hh_sav_i > 0 else 999
 
-        gn_roi_mc = (gn_savings - gn_investment) / gn_investment
-        gn_payback_mc = gn_investment / (gn_savings / sum(days.values()) * workdays_per_year)
+            # Gantry
+            gn_sav_i = 0
+            for p in st.session_state.projects.values():
+                labor_save = p['frames'] * (manual_frame_hr - gantry_frame_hr) * rate + \
+                             p['modules'] * ((manual_final_hr - gantry_final_hr) + (manual_rework_hr - gantry_rework_hr)) * rate
+                ev_save = p['modules'] * (p_late_manual - p_late_gantry) * temp_sev * p['module_value']
+                gn_sav_i += labor_save + ev_save
+            investment_i = num_gantries * gantry_capex_base + reprogram_per_project * num_gantries * max(projects_used - 1, 0)
+            gn_roi_i = (gn_sav_i - investment_i) / investment_i if investment_i > 0 else 0
+            gn_payback_i = investment_i / (gn_sav_i / total_days * workdays_per_year) if gn_sav_i > 0 else 999
+
+            hh_roi_list.append(hh_roi_i)
+            hh_payback_list.append(hh_payback_i)
+            gn_roi_list.append(gn_roi_i)
+            gn_payback_list.append(gn_payback_i)
 
         st.success("Monte Carlo Complete!")
 
-        st.header("Monte Carlo Distributions")
-        c1, c2 = st.columns(2)
-        with c1:
+        # Histograms
+        col1, col2 = st.columns(2)
+        with col1:
             fig, ax = plt.subplots()
-            ax.hist(hh_roi_mc, bins=60, color="#3498db", alpha=0.8, edgecolor='black')
-            ax.axvline(hh_roi, color='red', lw=2, label=f"Base: {hh_roi:.2f}x")
-            ax.set_title("Handheld ROI"); ax.set_xlabel("ROI (x)"); ax.legend()
-            st.pyplot(fig)
-            fig, ax = plt.subplots()
-            ax.hist(hh_payback_mc, bins=60, color="#3498db", alpha=0.8, edgecolor='black')
-            ax.axvline(hh_payback, color='red', lw=2, label=f"Base: {hh_payback:.2f} yrs")
-            ax.set_title("Handheld Payback"); ax.set_xlabel("Years"); ax.legend()
+            ax.hist(hh_roi_list, bins=60, color="#3498db", alpha=0.8, edgecolor='black')
+            ax.axvline(hh_roi, color='red', lw=3, label=f"Base: {hh_roi:.2f}x")
+            ax.set_title("Handheld ROI Distribution"); ax.set_xlabel("ROI (x)"); ax.legend()
             st.pyplot(fig)
 
-        with c2:
             fig, ax = plt.subplots()
-            ax.hist(gn_roi_mc, bins=60, color="#e67e22", alpha=0.8, edgecolor='black')
-            ax.axvline(gn_roi, color='red', lw=2, label=f"Base: {gn_roi:.2f}x")
-            ax.set_title("Gantry ROI"); ax.set_xlabel("ROI (x)"); ax.legend()
+            ax.hist(hh_payback_list, bins=60, color="#3498db", alpha=0.8, edgecolor='black')
+            ax.axvline(hh_pb, color='red', lw=3, label=f"Base: {hh_pb:.2f} yrs")
+            ax.set_title("Handheld Payback Period"); ax.set_xlabel("Years"); ax.legend()
             st.pyplot(fig)
+
+        with col2:
             fig, ax = plt.subplots()
-            ax.hist(gn_payback_mc, bins=60, color="#e67e22", alpha=0.8, edgecolor='black')
-            ax.axvline(gn_payback, color='red', lw=2, label=f"Base: {gn_payback:.2f} yrs")
-            ax.set_title("Gantry Payback"); ax.set_xlabel("Years"); ax.legend()
+            ax.hist(gn_roi_list, bins=60, color="#e67e22", alpha=0.8, edgecolor='black')
+            ax.axvline(gn_roi, color='red', lw=3, label=f"Base: {gn_roi:.2f}x")
+            ax.set_title("Gantry ROI Distribution"); ax.set_xlabel("ROI (x)"); ax.legend()
             st.pyplot(fig)
+
+            fig, ax = plt.subplots()
+            ax.hist(gn_payback_list, bins=60, color="#e67e22", alpha=0.8, edgecolor='black')
+            ax.axvline(gn_pb, color='red', lw=3, label=f"Base: {gn_pb:.2f} yrs")
+            ax.set_title("Gantry Payback Period"); ax.set_xlabel("Years"); ax.legend()
+            st.pyplot(fig)
+
+        # Sensitivity Button
+        if st.button("Show Sensitivity Tornado Charts"):
+            # Run sensitivity
+            sensitivity_vars = {
+                "Foreman Rate": ("rate", 0.8, 1.2),
+                "Workdays/Year": ("workdays_per_year", 0.9, 1.1),
+                "Handheld CAPEX": ("handheld_capex", 0.9, 1.1),
+                "Gantry CAPEX": ("gantry_capex_base", 0.9, 1.1),
+                "Reprogram Cost": ("reprogram_per_project", 0.8, 1.2),
+                "Scan Time": ("scan_mean", 0.8, 1.2),
+                "Error Rate": ("p_wrong_mean", 0.8, 1.2),
+                "Severity": ("severity_mean", 0.8, 1.2),
+            }
+
+            hh_delta = {}
+            gn_delta = {}
+            for label, (var, low, high) in sensitivity_vars.items():
+                orig = eval(var)
+                globals()[var] = orig * low
+                _, h_low, _, _, _, g_low, _ = calculate_roi()
+                globals()[var] = orig * high
+                _, h_high, _, _, _, g_high, _ = calculate_roi()
+                globals()[var] = orig
+                hh_delta[label] = (h_low - hh_roi, h_high - hh_roi)
+                gn_delta[label] = (g_low - gn_roi, g_high - gn_roi)
+
+            def plot_tornado(data, base, title):
+                labels = sorted(data, key=lambda k: max(abs(data[k][0]), abs(data[k][1])), reverse=True)
+                low = [data[l][0] for l in labels]
+                high = [data[l][1] for l in labels]
+                fig, ax = plt.subplots(figsize=(10, 6))
+                y = np.arange(len(labels))
+                ax.barh(y, low, left=base, color="#e74c3c", label="−20%")
+                ax.barh(y, high, left=base, color="#27ae60", label="+20%")
+                ax.set_yticks(y); ax.set_yticklabels(labels)
+                ax.set_xlabel("Δ ROI (x)"); ax.set_title(title)
+                ax.legend(); ax.grid(True, axis='x', alpha=0.3)
+                return fig
+
+            c1, c2 = st.columns(2)
+            with c1: st.pyplot(plot_tornado(hh_delta, hh_roi, "Handheld ROI Sensitivity"))
+            with c2: st.pyplot(plot_tornado(gn_delta, gn_roi, "Gantry ROI Sensitivity"))
 
 # -------------------------- RECOMMENDATION --------------------------
 st.markdown("---")
 st.success(f"""
-**Recommendation (Current Inputs)**
+**Recommendation**
 
-**Deploy {num_gantries} Gantry System(s)**  
-→ ROI: **{gn_roi:.2f}x** • Payback: **{gn_payback*12:.1f} months**
+**Deploy {num_gantries} Gantry System(s)** → **{gn_roi:.2f}x ROI** • **{gn_pb*12:.1f} months** payback  
+Handheld System → **{hh_roi:.2f}x ROI** • **{hh_pb:.1f} years** payback  
 
-Handheld System  
-→ ROI: **{hh_roi:.2f}x** • Payback: **{hh_payback:.1f} years**
-
-**Gantry is the clear winner.**
+**Gantry is the superior investment.**
 """)
-st.caption("DPR Construction • Laser Scan Car Wash ROI Model • 2025")
+st.caption("DPR Construction • Laser Scan Car Wash • 2025")
