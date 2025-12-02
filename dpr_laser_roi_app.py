@@ -76,7 +76,7 @@ handheld_capex = st.sidebar.number_input("Handheld system CAPEX ($)", 100000, 10
 gantry_capex_base = st.sidebar.number_input("Gantry CAPEX per unit ($)", 1000000, 5000000, 1479552, 50000)
 reprogram_per_project = st.sidebar.number_input("Reprogramming cost per extra project ($)", 0, 200000, 40000, 5000)
 
-# Force gantry = 1 unit (per your request)
+# Force gantry = 1 unit
 num_gantries = 1
 projects_used = st.sidebar.selectbox("Projects using the gantry", [1, 2, 3, 4, 5], 2)
 
@@ -133,13 +133,12 @@ p_late_manual = beta_mean(4, 196)                            # ~ 2%
 p_late_gantry = beta_mean(1, 99)                             # ~ 1%
 
 def calculate_roi():
-    # ---------------- HANDHELD (match base Python model) ----------------
+    # ---------------- HANDHELD (base model) ----------------
     hh_savings = 0.0
     for p in st.session_state.projects.values():
         parts_day = p['parts_per_day']
         days = p['days']
 
-        # Labor per day without handheld vs with handheld
         manual_labor_day = manual_receiving_hours_day * rate
         scanning_labor_day = parts_day * (scan_mean / 60.0) * rate
 
@@ -159,7 +158,6 @@ def calculate_roi():
         modules = p['modules']
         mv = p['module_value']
 
-        # Labor savings: manual minus gantry, floored at 0
         frame_labor_save = max(manual_frame_hr - gantry_frame_hr, 0.0) * rate
         module_labor_save = (
             max(manual_final_hr - gantry_final_hr, 0.0) +
@@ -168,7 +166,6 @@ def calculate_roi():
 
         labor_save_total = frames * frame_labor_save + modules * module_labor_save
 
-        # Expected value of late defects avoided
         delta_p = max(p_late_manual - p_late_gantry, 0.0)
         ev_per_module = delta_p * severity_mean * mv
         ev_save_total = modules * ev_per_module
@@ -299,6 +296,71 @@ if run_mc:
             ax.set_title("Gantry Payback Period"); ax.set_xlabel("Years"); ax.legend()
             st.pyplot(fig)
 
+# -------------------------- SENSITIVITY TORNADO CHARTS --------------------------
+if st.button("Show Sensitivity Tornado Charts"):
+    # Sensitivity on ROI for key drivers, via ±20% perturbations
+    sensitivity_vars = {
+        "Foreman Rate": ("rate", 0.8, 1.2),
+        "Workdays/Year": ("workdays_per_year", 0.9, 1.1),
+        "Handheld CAPEX": ("handheld_capex", 0.9, 1.1),
+        "Gantry CAPEX": ("gantry_capex_base", 0.9, 1.1),
+        "Reprogram Cost": ("reprogram_per_project", 0.8, 1.2),
+        "Scan Time Mean": ("scan_mean", 0.8, 1.2),
+        "Wrong-size Rate": ("p_wrong_mean", 0.8, 1.2),
+        "Defect Severity": ("severity_mean", 0.8, 1.2),
+    }
+
+    hh_delta = {}
+    gn_delta = {}
+
+    # Use globals() to temporarily override variables
+    for label, (var_name, low_mult, high_mult) in sensitivity_vars.items():
+        orig = globals()[var_name]
+
+        # Low case
+        globals()[var_name] = orig * low_mult
+        _, hh_low, _, _, _, gn_low, _ = calculate_roi()
+
+        # High case
+        globals()[var_name] = orig * high_mult
+        _, hh_high, _, _, _, gn_high, _ = calculate_roi()
+
+        # Restore
+        globals()[var_name] = orig
+
+        hh_delta[label] = (hh_low - hh_roi, hh_high - hh_roi)
+        gn_delta[label] = (gn_low - gn_roi, gn_high - gn_roi)
+
+    def plot_tornado(delta_dict, base_value, title):
+        labels = sorted(
+            delta_dict,
+            key=lambda k: max(abs(delta_dict[k][0]), abs(delta_dict[k][1])),
+            reverse=True,
+        )
+        low_vals = [delta_dict[l][0] for l in labels]
+        high_vals = [delta_dict[l][1] for l in labels]
+
+        y = np.arange(len(labels))
+        fig, ax = plt.subplots(figsize=(8, 5))
+        ax.barh(y, low_vals, left=base_value, color="#e74c3c", alpha=0.8, label="Low case")
+        ax.barh(y, high_vals, left=base_value, color="#27ae60", alpha=0.8, label="High case")
+        ax.set_yticks(y)
+        ax.set_yticklabels(labels)
+        ax.set_xlabel("ROI (x)")
+        ax.set_title(title)
+        ax.axvline(base_value, color="black", lw=2, linestyle="--", label="Base ROI")
+        ax.legend()
+        ax.grid(axis="x", alpha=0.3)
+        plt.tight_layout()
+        return fig
+
+    st.subheader("Sensitivity Tornado Charts")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.pyplot(plot_tornado(hh_delta, hh_roi, "Handheld ROI Sensitivity"))
+    with col2:
+        st.pyplot(plot_tornado(gn_delta, gn_roi, "Gantry ROI Sensitivity"))
+
 # -------------------------- RECOMMENDATION --------------------------
 st.markdown("---")
 st.success(f"""
@@ -310,4 +372,3 @@ Handheld System → **{hh_roi:.2f}x ROI** • **{hh_pb:.1f} years** payback
 Use the sidebar to adjust labor hours, error rates, and severity to see how the business case shifts.
 """)
 st.caption("DPR Construction • Laser Scan Car Wash • 2025")
-
