@@ -16,12 +16,12 @@ with col_title:
 if 'projects' not in st.session_state:
     st.session_state.projects = {
         'Project 1': {'days': 650, 'frames': 2880, 'modules': 1440, 'parts_per_day': 24.0, 'module_value': 100000},
-        'Project 2': {'days': 168, 'frames': 1400, 'modules': 700, 'parts_per_day': 20.0, 'module_value': 474000},
-        'Project 3': {'days': 42,  'frames': 90,   'modules': 45,  'parts_per_day': 26.4, 'module_value': 650000},
+        'Project 2': {'days': 168, 'frames': 1400, 'modules': 700,  'parts_per_day': 20.0, 'module_value': 474000},
+        'Project 3': {'days': 42,  'frames': 90,   'modules': 45,   'parts_per_day': 26.4, 'module_value': 650000},
     }
 
 st.sidebar.header("Project Manager")
-new_proj = st.sidebar.text_input("Add new project (e.g., Project 4)")
+new_proj = st.sidebar.text_input("Add new project (e.g., RPL Phase 2)")
 if st.sidebar.button("Add Project") and new_proj:
     if new_proj not in st.session_state.projects:
         st.session_state.projects[new_proj] = {
@@ -96,29 +96,77 @@ sev_min = st.sidebar.number_input("Late defect severity min (%)", 0.0, 0.2, 0.01
 sev_mode = st.sidebar.number_input("Late defect severity mode (%)", 0.005, 0.2, 0.02, 0.005, format="%.3f")
 sev_max = st.sidebar.number_input("Late defect severity max (%)", 0.01, 0.3, 0.05, 0.01, format="%.3f")
 
-# Project Inputs
+# -------------------------- PROJECT DETAILS (EDITABLE NAMES) --------------------------
 st.sidebar.markdown("---")
 st.sidebar.subheader("Project Details")
-for proj_name, defaults in st.session_state.projects.items():
+
+# Iterate over a copy so we can safely rename keys
+for proj_name, defaults in list(st.session_state.projects.items()):
     with st.sidebar.expander(f"Edit {proj_name}", expanded=False):
+
+        # Editable project name
+        new_name = st.text_input(
+            "Project name",
+            value=proj_name,
+            key=f"name_{proj_name}"
+        )
+
         col1, col2 = st.columns(2)
         with col1:
-            st.session_state.projects[proj_name]['days'] = st.number_input(
-                f"{proj_name} days", 1, 2000, defaults['days'], key=f"days_{proj_name}"
+            days_val = st.number_input(
+                f"{proj_name} days",
+                1, 2000,
+                defaults['days'],
+                key=f"days_{proj_name}"
             )
-            st.session_state.projects[proj_name]['frames'] = st.number_input(
-                f"{proj_name} frames", 1, 10000, defaults['frames'], key=f"frames_{proj_name}"
+            frames_val = st.number_input(
+                f"{proj_name} frames",
+                1, 10000,
+                defaults['frames'],
+                key=f"frames_{proj_name}"
             )
-            st.session_state.projects[proj_name]['modules'] = st.number_input(
-                f"{proj_name} modules", 1, 5000, defaults['modules'], key=f"modules_{proj_name}"
+            modules_val = st.number_input(
+                f"{proj_name} modules",
+                1, 5000,
+                defaults['modules'],
+                key=f"modules_{proj_name}"
             )
         with col2:
-            st.session_state.projects[proj_name]['parts_per_day'] = st.number_input(
-                f"{proj_name} parts/day", 1.0, 100.0, defaults['parts_per_day'], 0.5, key=f"ppd_{proj_name}"
+            ppd_val = st.number_input(
+                f"{proj_name} parts/day",
+                1.0, 100.0,
+                defaults['parts_per_day'],
+                0.5,
+                key=f"ppd_{proj_name}"
             )
-            st.session_state.projects[proj_name]['module_value'] = st.number_input(
-                f"{proj_name} value ($)", 10000, 5000000, defaults['module_value'], 10000, key=f"value_{proj_name}"
+            value_val = st.number_input(
+                f"{proj_name} value ($)",
+                10000, 5_000_000,
+                defaults['module_value'],
+                10_000,
+                key=f"value_{proj_name}"
             )
+
+        # Build updated data
+        updated_data = {
+            'days': int(days_val),
+            'frames': int(frames_val),
+            'modules': int(modules_val),
+            'parts_per_day': float(ppd_val),
+            'module_value': int(value_val),
+        }
+
+        # Handle rename
+        if new_name != proj_name:
+            if new_name in st.session_state.projects:
+                st.warning(f'Name "{new_name}" already exists. Keeping "{proj_name}".')
+                st.session_state.projects[proj_name] = updated_data
+            else:
+                del st.session_state.projects[proj_name]
+                st.session_state.projects[new_name] = updated_data
+                st.experimental_rerun()
+        else:
+            st.session_state.projects[proj_name] = updated_data
 
 # -------------------------- CALCULATIONS --------------------------
 total_days = sum(p['days'] for p in st.session_state.projects.values())
@@ -133,7 +181,7 @@ p_late_manual = beta_mean(4, 196)                            # ~ 2%
 p_late_gantry = beta_mean(1, 99)                             # ~ 1%
 
 def calculate_roi():
-    # ---------------- HANDHELD (base model) ----------------
+    # ---------------- HANDHELD ----------------
     hh_savings = 0.0
     for p in st.session_state.projects.values():
         parts_day = p['parts_per_day']
@@ -151,7 +199,7 @@ def calculate_roi():
     hh_annual_sav = hh_savings / total_days * workdays_per_year if total_days > 0 else 0.0
     hh_payback = handheld_capex / hh_annual_sav if hh_annual_sav > 0 else 999.0
 
-    # ---------------- GANTRY (frame + module QC) ----------------
+    # ---------------- GANTRY ----------------
     gn_savings = 0.0
     for p in st.session_state.projects.values():
         frames = p['frames']
@@ -216,7 +264,7 @@ if run_mc:
             temp_p_wrong = p_wrongs[i]
             temp_sev = severities[i]
 
-            # ---- Handheld for this iteration ----
+            # Handheld scenario i
             hh_sav_i = 0.0
             for p in st.session_state.projects.values():
                 parts_day = p['parts_per_day']
@@ -234,7 +282,7 @@ if run_mc:
             hh_annual_sav_i = hh_sav_i / total_days * workdays_per_year if total_days > 0 else 0.0
             hh_payback_i = handheld_capex / hh_annual_sav_i if hh_annual_sav_i > 0 else 999.0
 
-            # ---- Gantry for this iteration ----
+            # Gantry scenario i
             gn_sav_i = 0.0
             for p in st.session_state.projects.values():
                 frames = p['frames']
@@ -298,7 +346,6 @@ if run_mc:
 
 # -------------------------- SENSITIVITY TORNADO CHARTS --------------------------
 if st.button("Show Sensitivity Tornado Charts"):
-    # Sensitivity on ROI for key drivers, via ±20% perturbations
     sensitivity_vars = {
         "Foreman Rate": ("rate", 0.8, 1.2),
         "Workdays/Year": ("workdays_per_year", 0.9, 1.1),
@@ -313,20 +360,16 @@ if st.button("Show Sensitivity Tornado Charts"):
     hh_delta = {}
     gn_delta = {}
 
-    # Use globals() to temporarily override variables
     for label, (var_name, low_mult, high_mult) in sensitivity_vars.items():
         orig = globals()[var_name]
 
-        # Low case
         globals()[var_name] = orig * low_mult
         _, hh_low, _, _, _, gn_low, _ = calculate_roi()
 
-        # High case
         globals()[var_name] = orig * high_mult
         _, hh_high, _, _, _, gn_high, _ = calculate_roi()
 
-        # Restore
-        globals()[var_name] = orig
+        globals()[var_name] = orig  # reset
 
         hh_delta[label] = (hh_low - hh_roi, hh_high - hh_roi)
         gn_delta[label] = (gn_low - gn_roi, gn_high - gn_roi)
@@ -355,10 +398,10 @@ if st.button("Show Sensitivity Tornado Charts"):
         return fig
 
     st.subheader("Sensitivity Tornado Charts")
-    col1, col2 = st.columns(2)
-    with col1:
+    c1, c2 = st.columns(2)
+    with c1:
         st.pyplot(plot_tornado(hh_delta, hh_roi, "Handheld ROI Sensitivity"))
-    with col2:
+    with c2:
         st.pyplot(plot_tornado(gn_delta, gn_roi, "Gantry ROI Sensitivity"))
 
 # -------------------------- RECOMMENDATION --------------------------
